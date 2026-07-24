@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+.venv/
+venv/
+
+.env
+.env.*
+!.env.example
+
+config/
+*gmail*oauth*.json
+*gmail*token*.json
+*feishu*config*.json
