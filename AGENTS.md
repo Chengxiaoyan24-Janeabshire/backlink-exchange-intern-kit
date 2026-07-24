@@ -34,6 +34,13 @@ Python 3 plus `requests`; Google Gmail API client libraries are used by the sync
 
 `BACKGROUND.md` is the project-level business contract. The installed evaluation subskills implement that contract; do not create a second local template or alternate decision flow.
 
+## Change Log
+
+- Before every push that contains new repository commits, update `CHANGELOG.md` in the same batch. One entry may summarize multiple commits in that push.
+- Use `YYYY-MM-DD — short topic` headings and only the applicable `Added`, `Changed`, `Fixed`, `Removed`, or `Security` categories.
+- Describe user-visible functionality, runtime behavior, workflow rules, or important fixes. Do not use the Change Log as a file-by-file activity list.
+- Do not claim a live result or production verification unless it was actually checked during that change.
+
 ## Current Status
 
 As of 2026-07-24, the active local runtime is `scripts/sync_gmail_threads_to_feishu.py`, with focused regression coverage in `tests/test_sync_gmail.py`. The Feishu template Wiki is the reusable-email template source of truth. Live verification against the Pureinsights thread detects separate Message 3 and Message 5 evidence.
