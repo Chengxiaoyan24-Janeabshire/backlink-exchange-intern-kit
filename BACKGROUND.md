@@ -45,6 +45,8 @@ The Evaluation contains Company & Service Overview, Backlink Health, five partne
 
 `Next Step` is human-authored. Gmail sync never overwrites it and does not create an outbound draft automatically.
 
+Existing Communication Thread documents are immutable history: never rebuild or replace them. Append only Gmail messages not already present so manually highlighted template evidence and its source wording remain intact.
+
 To approve reusable template evidence, highlight the exact reusable fragment in an outgoing Communication Thread email. Each contiguous highlighted fragment becomes its own evidence item and its own context/template, including when one email or thread has several highlights. On the next Gmail sync, use the containing email and full thread only to infer the fragment's situation. There are no `Context: yes/no` markers.
 
 `$draft-backlink-reply` is manual-only. It reads `Next Step`, the complete Communication Thread, and the template Wiki. If a template context matches, reuse the approved fixed phrasing. If no context matches, still draft from `Next Step` and verified thread facts. Append the draft at the thread end under `Next Draft`.

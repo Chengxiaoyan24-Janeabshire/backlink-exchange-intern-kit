@@ -10,6 +10,19 @@
 4. 每条 bullet 说明新增或改变了什么能力、行为或用户结果，不写成文件名清单。
 5. Change Log 与对应代码或文档放在同一批 commit 中，不能在功能推送后再补。
 
+## 2026-07-25 — Gmail 同步范围与增量写入
+
+### Changed
+
+- Gmail 批量同步改为处理 ongoing communication view 中的全部记录；不再设置默认条数上限，`Status`、`Collaboration` 和 `--limit` 仅在明确传参时才用于缩小范围。
+- 已有 Communication Thread 改为只追加尚未出现的 Gmail 消息，不再重复追加完整 Thread；新消息保存稳定 Gmail message ID，并兼容旧文档内容签名去重。
+
+### Fixed
+
+- 修复已进入 ongoing communication view、但合作类型不是“外链交换”的记录被默认同步遗漏的问题。
+- 修复重复写入完整 Thread 导致人工高亮来源难以保留和追踪的问题；旧文档无法读取时会安全跳过，而不是冒险写入。
+- 修复飞书文档字段仅返回标题时被误判为无链接、继而新建替代 Communication Thread 的问题。
+
 ## 2026-07-24 — README 与变更记录规范
 
 ### Added

@@ -80,8 +80,9 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 
 ## 5. Gmail 同步与模板沉淀
 
-- Sync 默认使用内置的 Organic Exchange table 和 ongoing communication view；不要借用相邻项目的 table/view ID。
+- Sync 默认使用内置的 Organic Exchange table 和 ongoing communication view；不要借用相邻项目的 table/view ID。凡进入该 view 的记录都属于默认同步范围，不再按 `Status`、`Collaboration` 或默认条数上限二次过滤。
 - 批量写入 Feishu 前先使用 `--dry-run`。
+- 已有 Communication Thread 永不重建或替换；同步仅追加尚未写入的新 Gmail 消息。新写入消息保存 Gmail message ID，旧文档通过内容签名兼容去重，从而保留人工高亮及其模板来源。
 - Gmail Thread 写入 Communication Thread 时会去除回复里重复引用的历史邮件，保留可读的实际消息内容。
 - 只有 outgoing email 中人工高亮的文字可以成为模板证据；incoming 高亮和未高亮文字不能成为 reusable phrasing。
 - 每个连续高亮片段独立生成一份 Context 和 Template。同一封邮件中有多个分开的高亮，也不能合并。
@@ -116,9 +117,11 @@ PYTHONUNBUFFERED=1 python3 scripts/sync_gmail_threads_to_feishu.py auth-gmail --
 先 dry run，再执行写入：
 
 ```bash
-python3 scripts/sync_gmail_threads_to_feishu.py sync --dry-run --limit 10
-python3 scripts/sync_gmail_threads_to_feishu.py sync --limit 10
+python3 scripts/sync_gmail_threads_to_feishu.py sync --dry-run
+python3 scripts/sync_gmail_threads_to_feishu.py sync
 ```
+
+只有明确需要小批量处理时才额外传入 `--limit N`。
 
 本地验证：
 

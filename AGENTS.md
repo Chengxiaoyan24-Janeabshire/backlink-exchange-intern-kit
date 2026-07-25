@@ -25,7 +25,9 @@ Python 3 plus `requests`; Google Gmail API client libraries are used by the sync
 - Keep secrets and OAuth tokens outside the repo. Default local paths are documented in `.env.example`.
 - The Organic Exchange Bitable field name `Responce` is intentionally misspelled to match the live field.
 - The Gmail sync defaults belong to the built-in Organic Exchange table and ongoing communication view. Do not borrow adjacent-project table/view IDs.
+- Every row returned by the ongoing communication view is in scope for the default Gmail sync, regardless of `Status` or `Collaboration`, with no default record-count cap. Apply field filters or `--limit` only when the user explicitly requests a narrower batch.
 - Use `--dry-run` before batch Feishu writes. Communication Thread docs are append-only.
+- Existing Communication Thread docs must never be rebuilt or replaced. Sync only Gmail messages not already present, using Gmail message IDs with legacy content matching for older docs, so human highlights and their source text remain intact.
 - `对接概括` and `Responce` are automated summaries. `Next Step` is human-authored and must never be overwritten.
 - Gmail sync must not generate an outbound draft automatically. `$draft-backlink-reply` is manual-only and appends `Next Draft` at the end of the Communication Thread.
 - Template approval uses human-highlighted fragments inside outgoing Communication Thread emails. There are no `Context: yes/no` markers. Every contiguous highlighted fragment is independent evidence and must produce its own context and reusable template, even when several highlights occur in one email or thread. Unhighlighted text is context only.
@@ -43,6 +45,6 @@ Python 3 plus `requests`; Google Gmail API client libraries are used by the sync
 
 ## Current Status
 
-As of 2026-07-24, the active local runtime is `scripts/sync_gmail_threads_to_feishu.py`, with focused regression coverage in `tests/test_sync_gmail.py`. The Feishu template Wiki is the reusable-email template source of truth. Live verification against the Pureinsights thread detects separate Message 3 and Message 5 evidence.
+As of 2026-07-25, the active local runtime is `scripts/sync_gmail_threads_to_feishu.py`, with focused regression coverage in `tests/test_sync_gmail.py`. Default batch scope is every row returned by the built-in ongoing communication view, without implicit `Status`, `Collaboration`, or record-count filters. A read-only live check returned seven rows in that view.
 
-On 2026-07-20, Gmail OAuth succeeded on this machine and matched threads were written for `bigdataboutique.com`, `pureinsights.com`, and `shiftasia.com`.
+The Feishu template Wiki is the reusable-email template source of truth. Regression coverage verifies that every contiguous outgoing highlight remains independent evidence.

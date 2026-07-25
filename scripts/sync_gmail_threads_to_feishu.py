@@ -2,9 +2,9 @@
 """Sync Gmail outreach threads into Feishu Organic Exchange rows.
 
 Workflow:
-1. Find Organic Exchange Tracker rows, usually from the "ongoing communication" view.
+1. Find every Organic Exchange Tracker row in the "ongoing communication" view.
 2. Search Gmail for a matching thread by Contact/domain.
-3. Append the Gmail thread transcript to the row's Communication Thread doc.
+3. Append only Gmail messages not already present in the row's Communication Thread doc.
 4. Summarize the full thread into 对接概括 and summarize the latest partner
    reply into Responce. Next Step remains human-authored guidance.
 5. Detect every contiguous human-highlighted fragment in outgoing emails and,
@@ -179,6 +179,7 @@ def list_records(
         url = (
             f"{FEISHU_BASE}/bitable/v1/apps/{app_token}/tables/{table_id}"
             f"/records?page_size={page_size}&automatic_fields=false"
+            f"&text_field_as_array=true"
         )
         if view_id:
             url += f"&view_id={view_id}"
@@ -197,7 +198,12 @@ def list_records(
 
 def get_record(token: str, app_token: str, table_id: str, record_id: str) -> dict[str, Any]:
     url = f"{FEISHU_BASE}/bitable/v1/apps/{app_token}/tables/{table_id}/records/{record_id}"
-    data = requests.get(url, headers=feishu_headers(token), timeout=20).json()
+    data = requests.get(
+        url,
+        headers=feishu_headers(token),
+        params={"text_field_as_array": "true"},
+        timeout=20,
+    ).json()
     if data.get("code") != 0:
         raise RuntimeError(f"Failed to get record {record_id}: {data}")
     return (data.get("data") or {}).get("record") or {}
@@ -490,6 +496,15 @@ def extract_highlighted_email_sections(blocks: list[dict[str, Any]]) -> list[str
             current.append((text, highlighted))
     flush()
     return sections
+
+
+def visible_doc_text(blocks: list[dict[str, Any]]) -> str:
+    """Return document text without changing rich-text styles or block content."""
+    return "\n".join(
+        text
+        for block in blocks
+        if (text := rich_text_block(block)[0])
+    )
 
 
 def template_evidence_id(section: str) -> str:
@@ -1373,18 +1388,110 @@ def thread_markdown(
         ]
     )
     for index, message in enumerate(messages, start=1):
-        parts.extend(
-            [
-                f"### Message {index}",
-                f"Date: {message.get('date', '')}",
-                f"From: {message.get('from', '')}",
-                f"To: {message.get('to', '')}",
-            ]
+        append_message_markdown(parts, index, message)
+    return "\n".join(parts)
+
+
+def normalize_message_match_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip().lower()
+
+
+def normalize_message_body_match_text(value: str) -> str:
+    return re.sub(r"[^\w]+", " ", value or "", flags=re.UNICODE).strip().lower()
+
+
+def gmail_message_marker(message: dict[str, Any]) -> str:
+    message_id = str(message.get("id") or "").strip()
+    return f"Gmail message ID: {message_id}" if message_id else ""
+
+
+def legacy_message_signature(message: dict[str, Any]) -> str:
+    """Match legacy docs by stable headers so highlighted or edited bodies remain safe."""
+    parts = [
+        f"Date: {message.get('date', '')}",
+        f"From: {message.get('from', '')}",
+        f"To: {message.get('to', '')}",
+    ]
+    if message.get("cc"):
+        parts.append(f"Cc: {message.get('cc', '')}")
+    return normalize_message_match_text("\n".join(parts))
+
+
+def legacy_message_body_signature(message: dict[str, Any]) -> str:
+    """Recognize manually pasted legacy emails that do not retain Gmail headers."""
+    body = normalize_message_body_match_text(str(message.get("body") or ""))
+    if len(body) < 80:
+        return ""
+    return body[:240]
+
+
+def select_new_messages(
+    messages: list[dict[str, Any]],
+    existing_doc_text: str,
+) -> list[tuple[int, dict[str, Any]]]:
+    """Return Gmail messages absent from an existing Communication Thread doc."""
+    normalized_doc = normalize_message_match_text(existing_doc_text)
+    normalized_doc_body = normalize_message_body_match_text(existing_doc_text)
+    new_messages: list[tuple[int, dict[str, Any]]] = []
+    for index, message in enumerate(messages, start=1):
+        marker = normalize_message_match_text(gmail_message_marker(message))
+        signature = legacy_message_signature(message)
+        body_signature = legacy_message_body_signature(message)
+        already_present = bool(
+            (marker and marker in normalized_doc)
+            or (signature and signature in normalized_doc)
+            or (body_signature and body_signature in normalized_doc_body)
         )
-        if message.get("cc"):
-            parts.append(f"Cc: {message.get('cc', '')}")
-        body = message.get("body", "").strip() or "[No readable text body]"
-        parts.extend(["", body, ""])
+        if not already_present:
+            new_messages.append((index, message))
+    return new_messages
+
+
+def append_message_markdown(
+    parts: list[str],
+    index: int,
+    message: dict[str, Any],
+) -> None:
+    parts.extend([f"### Message {index}"])
+    marker = gmail_message_marker(message)
+    if marker:
+        parts.append(marker)
+    parts.extend(
+        [
+            f"Date: {message.get('date', '')}",
+            f"From: {message.get('from', '')}",
+            f"To: {message.get('to', '')}",
+        ]
+    )
+    if message.get("cc"):
+        parts.append(f"Cc: {message.get('cc', '')}")
+    body = message.get("body", "").strip() or "[No readable text body]"
+    parts.extend(["", body, ""])
+
+
+def incremental_thread_markdown(
+    record: dict[str, Any],
+    query: str,
+    thread: dict[str, Any],
+    new_messages: list[tuple[int, dict[str, Any]]],
+) -> str:
+    """Render an append-only batch containing only newly observed Gmail messages."""
+    if not new_messages:
+        return ""
+    fields = record.get("fields") or {}
+    domain = extract_text(fields.get(FIELD_DOMAIN)) or record.get("record_id", "")
+    now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    parts = [
+        f"## Gmail Sync - New Messages - {domain}",
+        "",
+        f"Synced at: {now}",
+        f"Matched query: {query}",
+        f"Gmail thread ID: {thread.get('id', '')}",
+        f"New messages appended: {len(new_messages)}",
+        "",
+    ]
+    for index, message in new_messages:
+        append_message_markdown(parts, index, message)
     return "\n".join(parts)
 
 
@@ -1663,13 +1770,19 @@ def sync(args: argparse.Namespace) -> None:
         existing_thread_url = extract_url(fields.get(FIELD_THREAD))
         existing_doc_id = doc_id_from_url(existing_thread_url)
         highlighted_emails: list[str] = []
+        existing_doc_text = ""
         if existing_doc_id:
             try:
-                highlighted_emails = extract_highlighted_email_sections(
-                    fetch_doc_blocks(token, existing_doc_id)
-                )
+                existing_doc_blocks = fetch_doc_blocks(token, existing_doc_id)
+                highlighted_emails = extract_highlighted_email_sections(existing_doc_blocks)
+                existing_doc_text = visible_doc_text(existing_doc_blocks)
             except Exception as exc:
-                print(f"warning: could not read highlighted fragments from {existing_doc_id}: {exc}", file=sys.stderr)
+                print(
+                    f"error: could not read existing Communication Thread {existing_doc_id}; "
+                    f"skipping {domain} to preserve existing highlights and content: {exc}",
+                    file=sys.stderr,
+                )
+                continue
 
         evidence_pairs = [
             (template_evidence_id(section), section) for section in highlighted_emails
@@ -1699,14 +1812,24 @@ def sync(args: argparse.Namespace) -> None:
         )
         if args.pattern_doc_url and not pattern_summary:
             print(f"  template deposit skipped: {len(highlighted_emails)} new human-highlighted fragment(s)")
-        markdown = thread_markdown(
-            record,
-            query,
-            thread,
-            queries_tried=queries_tried,
-            connection_summary=connection_summary,
-            latest_response_summary=latest_response_summary,
-        )
+        messages = thread.get("messages") or []
+        new_messages = select_new_messages(messages, existing_doc_text)
+        if existing_doc_id:
+            markdown = incremental_thread_markdown(
+                record,
+                query,
+                thread,
+                new_messages,
+            )
+        else:
+            markdown = thread_markdown(
+                record,
+                query,
+                thread,
+                queries_tried=queries_tried,
+                connection_summary=connection_summary,
+                latest_response_summary=latest_response_summary,
+            )
         pattern_item = None
         if pattern_summary:
             pattern_item = {
@@ -1721,7 +1844,9 @@ def sync(args: argparse.Namespace) -> None:
             }
 
         if args.dry_run:
-            print(markdown[:2500])
+            if existing_doc_id:
+                print(f"New Gmail messages to append: {len(new_messages)}")
+            print(markdown[:2500] if markdown else "Communication Thread unchanged; no new Gmail messages.")
             planned_fields = {}
             if connection_summary:
                 planned_fields[FIELD_CONNECTION_SUMMARY] = connection_summary
@@ -1735,7 +1860,8 @@ def sync(args: argparse.Namespace) -> None:
             continue
 
         doc_id, url = ensure_thread_doc(token, config, base_url, record)
-        append_blocks(token, doc_id, markdown_to_blocks(markdown))
+        if markdown:
+            append_blocks(token, doc_id, markdown_to_blocks(markdown))
         record_updates: dict[str, Any] = {}
         if extract_url(fields.get(FIELD_THREAD)) != url:
             record_updates[FIELD_THREAD] = url
@@ -1749,7 +1875,13 @@ def sync(args: argparse.Namespace) -> None:
             pattern_item["doc_url"] = url
             pattern_items.append(pattern_item)
             known_evidence_ids.update(evidence_ids)
-        print(f"  appended to {url}")
+        if existing_doc_id:
+            if new_messages:
+                print(f"  appended {len(new_messages)} new Gmail message(s) to {url}")
+            else:
+                print(f"  no new Gmail messages; Communication Thread unchanged at {url}")
+        else:
+            print(f"  created initial Communication Thread with {len(messages)} Gmail message(s) at {url}")
 
     if pattern_items:
         aggregate_markdown = pattern_doc_markdown(pattern_items, config, args.model)
@@ -1810,8 +1942,16 @@ def parse_args() -> argparse.Namespace:
     sync_parser.add_argument("--view-id", default="", help="Defaults to the Organic Exchange ongoing communication view.")
     sync_parser.add_argument("--doc-base-url", default=DEFAULT_DOC_BASE_URL)
     sync_parser.add_argument("--record-id", action="append", default=[], help="Process one record ID; repeatable.")
-    sync_parser.add_argument("--status", default="沟通中", help="Status filter when listing records.")
-    sync_parser.add_argument("--collaboration", default="", help="Optional collaboration filter, e.g. 外链交换.")
+    sync_parser.add_argument(
+        "--status",
+        default="",
+        help="Optional status filter. By default, ongoing communication view membership is the only batch inclusion rule.",
+    )
+    sync_parser.add_argument(
+        "--collaboration",
+        default="",
+        help="Optional collaboration filter, e.g. 外链交换. Not applied by default.",
+    )
     sync_parser.add_argument(
         "--require-guidance",
         action="store_true",
@@ -1825,7 +1965,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not create/append a Communication Thread audit when Gmail has no match.",
     )
-    sync_parser.add_argument("--limit", type=int, default=10)
+    sync_parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Optional maximum record count. Defaults to all rows in the ongoing communication view.",
+    )
     sync_parser.add_argument(
         "--summary-mode",
         choices=["ai", "template", "none"],

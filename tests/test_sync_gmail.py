@@ -3,6 +3,7 @@ import base64
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "sync_gmail_threads_to_feishu.py"
@@ -13,6 +14,32 @@ SPEC.loader.exec_module(gmail_sync)
 
 
 class GmailBodyTests(unittest.TestCase):
+    def test_get_record_requests_rich_text_links(self):
+        response = mock.Mock()
+        response.json.return_value = {
+            "code": 0,
+            "data": {"record": {"record_id": "rec1", "fields": {}}},
+        }
+        with mock.patch.object(gmail_sync.requests, "get", return_value=response) as get:
+            gmail_sync.get_record("token", "app", "table", "rec1")
+
+        self.assertEqual(
+            get.call_args.kwargs["params"],
+            {"text_field_as_array": "true"},
+        )
+
+    def test_list_records_requests_rich_text_links(self):
+        response = mock.Mock()
+        response.json.return_value = {
+            "code": 0,
+            "data": {"items": [], "has_more": False},
+        }
+        with mock.patch.object(gmail_sync.requests, "get", return_value=response) as get:
+            gmail_sync.list_records("token", "app", "table", "view")
+
+        requested_url = get.call_args.args[0]
+        self.assertIn("text_field_as_array=true", requested_url)
+
     def test_quote_wrapped_message_keeps_current_body(self):
         raw = (
             "> Hi Itamar,\n>\n> Here is our new proposal.\n>\n"
@@ -112,6 +139,122 @@ Previous message body
         )
         self.assertIn(long_body, markdown)
         self.assertNotIn("[Body truncated]", markdown)
+
+    def test_thread_markdown_stores_gmail_message_id(self):
+        record = {"record_id": "rec1", "fields": {"Domain": "example.com"}}
+        thread = {
+            "id": "thread1",
+            "messages": [
+                {
+                    "id": "gmail-message-1",
+                    "subject": "Subject",
+                    "date": "Date",
+                    "from": "Partner <p@example.com>",
+                    "to": "Jane <jane@zilliz.com>",
+                    "cc": "",
+                    "body": "Message body",
+                }
+            ],
+        }
+
+        markdown = gmail_sync.thread_markdown(record, "query", thread)
+
+        self.assertIn("Gmail message ID: gmail-message-1", markdown)
+
+    def test_incremental_sync_selects_only_unseen_message_ids(self):
+        messages = [
+            {
+                "id": "gmail-message-1",
+                "date": "Date 1",
+                "from": "Partner <p@example.com>",
+                "to": "Jane <jane@zilliz.com>",
+                "cc": "",
+                "body": "First message",
+            },
+            {
+                "id": "gmail-message-2",
+                "date": "Date 2",
+                "from": "Jane <jane@zilliz.com>",
+                "to": "Partner <p@example.com>",
+                "cc": "",
+                "body": "Second message",
+            },
+        ]
+        existing = "Message 1\nGmail message ID: gmail-message-1\nFirst message"
+
+        new_messages = gmail_sync.select_new_messages(messages, existing)
+
+        self.assertEqual([index for index, _ in new_messages], [2])
+        self.assertEqual(new_messages[0][1]["id"], "gmail-message-2")
+
+    def test_incremental_sync_recognizes_legacy_message_with_edited_body(self):
+        message = {
+            "id": "gmail-message-1",
+            "date": "Thu, 9 Jul 2026 07:37:11 -0400",
+            "from": "Jane Jiang <jane.jiang@zilliz.com>",
+            "to": "Partner <partner@example.com>",
+            "cc": "",
+            "body": "A legacy message body that was written before IDs were stored.",
+        }
+        existing = """Message 1
+Date: Thu, 9 Jul 2026 07:37:11 -0400
+From: Jane Jiang <jane.jiang@zilliz.com>
+To: Partner <partner@example.com>
+
+This body was manually highlighted or edited after the original sync.
+"""
+
+        self.assertEqual(gmail_sync.select_new_messages([message], existing), [])
+
+    def test_incremental_sync_recognizes_manually_pasted_body_without_headers(self):
+        message = {
+            "id": "gmail-message-1",
+            "date": "Date",
+            "from": "Jane <jane@zilliz.com>",
+            "to": "Partner <partner@example.com>",
+            "cc": "",
+            "body": (
+                "Hi Graham, thank you again for the thoughtful proposal. "
+                "Once we receive the benchmark data and draft, our content team "
+                "can review the best available placement and share feedback."
+            ),
+        }
+        existing = (
+            "Message 5\nHi Graham — thank you again for the thoughtful proposal.\n"
+            "Once we receive the benchmark data and draft, our content team can "
+            "review the best available placement and share feedback."
+        )
+
+        self.assertEqual(gmail_sync.select_new_messages([message], existing), [])
+
+    def test_incremental_markdown_contains_only_new_messages(self):
+        record = {"record_id": "rec1", "fields": {"Domain": "example.com"}}
+        thread = {"id": "thread1", "messages": []}
+        new_messages = [
+            (
+                3,
+                {
+                    "id": "gmail-message-3",
+                    "date": "Date 3",
+                    "from": "Partner <p@example.com>",
+                    "to": "Jane <jane@zilliz.com>",
+                    "cc": "",
+                    "body": "Only the new message",
+                },
+            )
+        ]
+
+        markdown = gmail_sync.incremental_thread_markdown(
+            record,
+            "query",
+            thread,
+            new_messages,
+        )
+
+        self.assertIn("Message 3", markdown)
+        self.assertIn("gmail-message-3", markdown)
+        self.assertIn("Only the new message", markdown)
+        self.assertNotIn("Message 1", markdown)
 
 
 class HighlightAndQueryTests(unittest.TestCase):
@@ -279,6 +422,36 @@ class HighlightAndQueryTests(unittest.TestCase):
         self.assertGreaterEqual(len(queries), 3)
         self.assertIn("from:info@example.com", queries[0])
         self.assertTrue(any("from:example.com" in query for query in queries))
+
+
+class SyncScopeTests(unittest.TestCase):
+    def test_default_cli_uses_view_membership_without_field_filters(self):
+        with mock.patch(
+            "sys.argv",
+            ["sync_gmail_threads_to_feishu.py", "sync"],
+        ):
+            args = gmail_sync.parse_args()
+
+        self.assertEqual(args.status, "")
+        self.assertEqual(args.collaboration, "")
+        self.assertEqual(args.limit, 0)
+
+    def test_view_record_is_in_scope_regardless_of_status_or_collaboration(self):
+        record = {
+            "record_id": "rec1",
+            "fields": {
+                "Status": "等待内部确认",
+                "Collaboration": "内容合作",
+            },
+        }
+        args = argparse.Namespace(
+            record_id=[],
+            status="",
+            collaboration="",
+            require_guidance=False,
+        )
+
+        self.assertTrue(gmail_sync.should_process(record, args))
 
 if __name__ == "__main__":
     unittest.main()
