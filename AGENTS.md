@@ -31,6 +31,7 @@ Python 3 plus `requests`; Google Gmail API client libraries are used by the sync
 - `对接概括` and `Responce` are automated summaries. `Next Step` is human-authored and must never be overwritten.
 - Gmail sync must not generate an outbound draft automatically. `$draft-backlink-reply` is manual-only and appends `Next Draft` at the end of the Communication Thread.
 - Template approval uses human-highlighted fragments inside outgoing Communication Thread emails. There are no `Context: yes/no` markers. Every contiguous highlighted fragment is independent evidence and must produce its own context and reusable template, even when several highlights occur in one email or thread. Unhighlighted text is context only.
+- When the partner adds our link, the destination must be a relevant non-FAQ Milvus or Zilliz page. Never propose Zilliz AI FAQ, Milvus AI Quick Reference, or another FAQ/reference-style page for that side; Milvus AI Quick Reference is allowed only as our placement inventory when we add the partner's link.
 
 ## Evaluation Contract
 

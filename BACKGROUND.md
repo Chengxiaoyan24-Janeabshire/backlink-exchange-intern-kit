@@ -20,6 +20,7 @@ Keep Moz DA, Ahrefs DR, SEMrush Authority Score, and other provider metrics dist
 - Use older posts only when materially more relevant.
 - Verify URL and publication date.
 - Provide section, anchor, and sentence-level insertion recommendation.
+- The destination URL for our link must be a relevant non-FAQ Milvus or Zilliz page. Never use Zilliz AI FAQ, Milvus AI Quick Reference, or any other FAQ/reference-style page as the destination on the partner's site.
 - Reject homepage, product/service, company/contact, directory, partner, footer/sidebar, and generic resource-list placements.
 
 ## We Add Their Link
@@ -30,6 +31,8 @@ Recommend:
 - Three relevant pages from `milvus.io/ai-quick-reference/`.
 
 For Blog candidates, provide section, anchor, and insertion recommendation. AI Quick Reference candidates need only URL and topical-fit explanation.
+
+Milvus AI Quick Reference is eligible only as our placement inventory for adding the partner's link. It is not eligible as the destination when the partner adds our link.
 
 Exclude Zilliz AI FAQ and exclude Blog pages that are new product announcements/releases, Featured collections, launch or announcement content, promotional posts, or sponsored-style content.
 

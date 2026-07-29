@@ -384,8 +384,8 @@ def fetch_doc_blocks(token: str, doc_id: str) -> list[dict[str, Any]]:
     return blocks
 
 
-def rich_text_block(block: dict[str, Any]) -> tuple[str, bool]:
-    """Return visible block text and whether any text run has a highlight."""
+def rich_text_block_runs(block: dict[str, Any]) -> tuple[str, list[tuple[str, bool]]]:
+    """Return visible block text plus run-level highlight state."""
     payload = None
     for key in (
         "text",
@@ -406,28 +406,48 @@ def rich_text_block(block: dict[str, Any]) -> tuple[str, bool]:
             payload = block[key]
             break
     if not payload:
-        return "", False
+        return "", []
 
-    parts: list[str] = []
-    highlighted = False
+    runs: list[tuple[str, bool]] = []
     for element in payload.get("elements") or []:
         text_run = element.get("text_run") or {}
         content = str(text_run.get("content") or "")
-        if content:
-            parts.append(content)
         style = text_run.get("text_element_style") or {}
         background = style.get("background_color")
         if isinstance(background, (int, float)):
-            highlighted = highlighted or background != 0
+            highlighted = background != 0
         elif background is not None:
-            highlighted = highlighted or str(background).strip().lower() not in {
+            highlighted = str(background).strip().lower() not in {
                 "",
                 "0",
                 "none",
                 "null",
                 "transparent",
             }
-    return "".join(parts).strip(), highlighted
+        else:
+            highlighted = False
+        if content:
+            runs.append((content, highlighted))
+
+    # Feishu may store a line break between two highlighted runs without a
+    # background color. Preserve that formatting without splitting one human
+    # highlight into two fragments.
+    normalized_runs = list(runs)
+    for index, (content, highlighted) in enumerate(normalized_runs):
+        if highlighted or content.strip():
+            continue
+        previous_highlighted = index > 0 and normalized_runs[index - 1][1]
+        next_highlighted = index + 1 < len(normalized_runs) and normalized_runs[index + 1][1]
+        if previous_highlighted and next_highlighted:
+            normalized_runs[index] = (content, True)
+
+    return "".join(content for content, _ in normalized_runs).strip(), normalized_runs
+
+
+def rich_text_block(block: dict[str, Any]) -> tuple[str, bool]:
+    """Return visible block text and whether any text run has a highlight."""
+    text, runs = rich_text_block_runs(block)
+    return text, any(highlighted for _, highlighted in runs)
 
 
 def is_outgoing_email_section(section: str) -> bool:
@@ -449,11 +469,11 @@ def extract_highlighted_email_sections(blocks: list[dict[str, Any]]) -> list[str
     """Extract each contiguous highlighted fragment from outgoing email sections."""
     message_heading = re.compile(r"(?i)^\s*(?:message|sent email)\s+\d+\s*$")
     sections: list[str] = []
-    current: list[tuple[str, bool]] = []
+    current: list[tuple[str, list[tuple[str, bool]], bool]] = []
 
     def flush() -> None:
         nonlocal current
-        section = "\n".join(text for text, _ in current if text).strip()
+        section = "\n".join(text for text, _, _ in current if text).strip()
         if not (section and is_outgoing_email_section(section)):
             current = []
             return
@@ -465,35 +485,47 @@ def extract_highlighted_email_sections(blocks: list[dict[str, Any]]) -> list[str
 
         def flush_group() -> None:
             nonlocal highlighted_group
-            excerpt = "\n".join(highlighted_group).strip()
+            excerpt = "".join(highlighted_group).strip()
             if excerpt:
                 sections.append(
                     "\n".join([heading, source, "Highlighted excerpt:", excerpt])
                 )
             highlighted_group = []
 
-        for text, highlighted in current[1:]:
-            if highlighted:
-                highlighted_group.append(text)
-            else:
+        for text, runs, is_list in current[1:]:
+            if not text:
                 flush_group()
+                continue
+
+            first_highlight_in_block = True
+            for content, highlighted in runs:
+                if highlighted:
+                    if first_highlight_in_block:
+                        if highlighted_group:
+                            highlighted_group.append("\n")
+                        if is_list:
+                            highlighted_group.append("- ")
+                        first_highlight_in_block = False
+                    highlighted_group.append(content)
+                elif content.strip():
+                    flush_group()
+                    first_highlight_in_block = True
         flush_group()
         current = []
 
     for block in blocks:
-        text, highlighted = rich_text_block(block)
+        text, runs = rich_text_block_runs(block)
         block_type = int(block.get("block_type") or 0)
         if message_heading.match(text):
             flush()
-            current = [(text, highlighted)]
+            current = [(text, runs, False)]
             continue
         if current and 3 <= block_type <= 11:
             flush()
             continue
-        if current and text:
-            if isinstance(block.get("ordered"), dict) or isinstance(block.get("bullet"), dict):
-                text = f"- {text}"
-            current.append((text, highlighted))
+        if current:
+            is_list = isinstance(block.get("ordered"), dict) or isinstance(block.get("bullet"), dict)
+            current.append((text, runs, is_list))
     flush()
     return sections
 

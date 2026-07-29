@@ -4,6 +4,7 @@
 >
 > - 评估规则：合作方健康度必须与完整的 `milvus.io` 和 `zilliz.com` 域名比较，不混用不同 SEO provider 的指标。
 > - 对方页面规则：正好推荐 5 篇真实 Blog，优先 2025 或 2026 年内容，并给出 section、anchor 和句子级插入建议。
+> - 对方链接目标规则：对方给我们加链接时，目标必须是相关的非 FAQ Milvus/Zilliz 页面；禁止使用 Zilliz AI FAQ、Milvus AI Quick Reference 或其他 FAQ/reference-style 页面。
 > - 我方页面规则：推荐 1–2 篇 Zilliz/Milvus Blog，加正好 3 篇 Milvus AI Quick Reference。
 > - Placement 规则：只接受 indexable、dofollow、正文内且语义自然的链接；拒绝 sponsored、nofollow、noindex、footer、sidebar 和目录页。
 > - Gmail 规则：同步只更新自动摘要和 Communication Thread，绝不覆盖人工填写的 `Next Step`，也不自动生成回复。
@@ -72,8 +73,9 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 - Health assessment 比较完整的 `https://milvus.io/`、`https://zilliz.com/` 和合作方域名。
 - Moz DA、Ahrefs DR、SEMrush Authority Score 等指标必须保留 provider 标签，不能当作同一个数值比较。
 - 对方候选必须是可索引的真实 Blog 内容；不接受 homepage、product/service、company、contact、directory、partner 或 generic resource-list 页面。
+- 对方在候选 Blog 中添加我们的链接时，链接目标必须是相关的非 FAQ Milvus/Zilliz 页面；Zilliz AI FAQ、Milvus AI Quick Reference 及其他 FAQ/reference-style 页面都不能作为这一侧的目标。
 - 我方 Blog 候选只来自 `zilliz.com/blog/` 或 `milvus.io/blog/`，排除产品发布、功能公告、Featured collection 和 sponsored-style 内容。
-- Milvus AI Quick Reference 候选只来自 `milvus.io/ai-quick-reference/`；Zilliz AI FAQ 不属于可用 inventory。
+- Milvus AI Quick Reference 候选只来自 `milvus.io/ai-quick-reference/`，仅用于我们给对方添加链接的一侧；Zilliz AI FAQ 不属于可用 inventory。
 - Evaluation 输出不包含 Decision、Best Bilateral Placement、Missing Information 或 reply draft。
 
 完整业务合同以 [`BACKGROUND.md`](BACKGROUND.md) 为准；已安装的 evaluation Skills 实现该合同，本仓库不维护第二套评估模板。

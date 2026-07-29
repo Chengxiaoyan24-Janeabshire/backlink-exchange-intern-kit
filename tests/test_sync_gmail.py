@@ -376,6 +376,89 @@ class HighlightAndQueryTests(unittest.TestCase):
             gmail_sync.template_evidence_id(sections[1]),
         )
 
+    def test_empty_paragraph_separates_highlights_in_one_email(self):
+        def block(text, block_type=2, background_color=0):
+            key = {2: "text", 5: "heading3"}[block_type]
+            return {
+                "block_type": block_type,
+                key: {
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": text,
+                                "text_element_style": {"background_color": background_color},
+                            }
+                        }
+                    ]
+                },
+            }
+
+        sections = gmail_sync.extract_highlighted_email_sections(
+            [
+                block("Message 7", 5),
+                block("From: Jane <jane@zilliz.com>"),
+                block("First reusable fragment.", background_color=2),
+                block(""),
+                block("Second reusable fragment.", background_color=2),
+            ]
+        )
+
+        self.assertEqual(len(sections), 2)
+        self.assertIn("First reusable fragment", sections[0])
+        self.assertIn("Second reusable fragment", sections[1])
+
+    def test_mixed_highlight_runs_in_one_block_remain_independent(self):
+        def block(text, block_type=2, background_color=0):
+            key = {2: "text", 5: "heading3"}[block_type]
+            return {
+                "block_type": block_type,
+                key: {
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": text,
+                                "text_element_style": {"background_color": background_color},
+                            }
+                        }
+                    ]
+                },
+            }
+
+        mixed_block = block("")
+        mixed_block["text"]["elements"] = [
+            {
+                "text_run": {
+                    "content": "First reusable fragment.",
+                    "text_element_style": {"background_color": 2},
+                }
+            },
+            {
+                "text_run": {
+                    "content": " Unhighlighted bridge. ",
+                    "text_element_style": {"background_color": 0},
+                }
+            },
+            {
+                "text_run": {
+                    "content": "Second reusable fragment.",
+                    "text_element_style": {"background_color": 2},
+                }
+            },
+        ]
+
+        sections = gmail_sync.extract_highlighted_email_sections(
+            [
+                block("Message 7", 5),
+                block("From: Jane <jane@zilliz.com>"),
+                mixed_block,
+            ]
+        )
+
+        self.assertEqual(len(sections), 2)
+        self.assertIn("First reusable fragment", sections[0])
+        self.assertIn("Second reusable fragment", sections[1])
+        self.assertNotIn("Unhighlighted bridge", "\n".join(sections))
+
     def test_heuristic_fallback_keeps_one_template_per_highlight(self):
         fragments = [
             "Message 3\nFrom: Jane <jane@zilliz.com>\nHighlighted excerpt:\n"

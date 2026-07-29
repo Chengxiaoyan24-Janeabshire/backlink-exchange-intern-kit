@@ -10,6 +10,16 @@
 4. 每条 bullet 说明新增或改变了什么能力、行为或用户结果，不写成文件名清单。
 5. Change Log 与对应代码或文档放在同一批 commit 中，不能在功能推送后再补。
 
+## 2026-07-29 — 链接目标与模板证据拆分
+
+### Changed
+
+- 对方给我们添加链接时，目标 URL 必须是相关的非 FAQ Milvus/Zilliz 页面；明确排除 Zilliz AI FAQ、Milvus AI Quick Reference 和其他 FAQ/reference-style 页面。Milvus AI Quick Reference 仅保留为我们给对方回链时的候选库存。
+
+### Fixed
+
+- 修复同一封 outgoing email 中由空白段落或未高亮文字隔开的多个高亮片段被合并的问题，确保每个连续人工高亮分别生成独立的模板证据。
+
 ## 2026-07-25 — Gmail 同步范围与增量写入
 
 ### Changed
