@@ -7,7 +7,7 @@
 > - 对方链接目标规则：对方给我们加链接时，目标必须是相关的非 FAQ Milvus/Zilliz 页面；禁止使用 Zilliz AI FAQ、Milvus AI Quick Reference 或其他 FAQ/reference-style 页面。
 > - 我方页面规则：推荐 1–2 篇 Zilliz/Milvus Blog，加正好 3 篇 Milvus AI Quick Reference。
 > - Placement 规则：只接受 indexable、dofollow、正文内且语义自然的链接；拒绝 sponsored、nofollow、noindex、footer、sidebar 和目录页。
-> - Gmail 规则：同步只更新自动摘要和 Communication Thread，绝不覆盖人工填写的 `Next Step`，也不自动生成回复。
+> - Gmail 规则：同步更新 Base 自动摘要并刷新 Thread 顶部受管快照；人工填写的 Base `Next Step`、邮件高亮来源和 `Next Draft` 不会被覆盖，也不会自动生成回复。
 > - 模板规则：每个 outgoing email 中连续的人工高亮片段都是独立证据，分别生成自己的 Context 和 reusable Template。
 
 ## 1. 整个 Agent 的逻辑
@@ -24,8 +24,8 @@
    ├─ 同步 Gmail 沟通
    │   └─ sync-backlink-gmail
    │       ├─ 匹配 Organic Exchange row 与 Gmail Thread
-   │       ├─ 清理重复引用并追加 Communication Thread
-   │       ├─ 更新 对接概括 和 Responce，保留人工 Next Step
+   │       ├─ 清理重复引用并追加 Communication Thread 邮件历史
+   │       ├─ 更新 Base 的 对接概括 和 Responce，并刷新 Thread 顶部的 对接概括 / Responce / Next Step 镜像
    │       └─ 把每个新高亮片段分别沉淀到模板 Wiki
    │
    └─ 起草下一封回复
@@ -63,8 +63,8 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 |---|---|---|
 | `对接概括` | Gmail sync 自动更新 | 完整沟通进展的简要概括 |
 | `Responce` | Gmail sync 自动更新 | 最新一封合作方回复的概括；拼写与线上 Bitable 字段保持一致 |
-| `Next Step` | 人工维护 | 下一封回复要达成的目标，自动化永远不能覆盖 |
-| `Communication Thread` | Gmail sync 追加 | 可审计的完整邮件沟通记录，只追加、不重写历史 |
+| `Next Step` | 人工维护 | 下一封回复要达成的目标，自动化永远不能覆盖 Base 原值；Thread 顶部只做当前值镜像 |
+| `Communication Thread` | Gmail sync 维护 | 顶部受管快照原位刷新；邮件历史、高亮来源和 Next Draft 只追加、不重写 |
 | `Next Draft` | `draft-backlink-reply` 人工触发 | 根据 Next Step 和已验证 Thread 生成的下一封草稿 |
 | `Evaluation` | 完整评估流程写入 | 合作方 Evaluation Doc 链接 |
 
@@ -84,7 +84,7 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 
 - Sync 默认使用内置的 Organic Exchange table 和 ongoing communication view；不要借用相邻项目的 table/view ID。凡进入该 view 的记录都属于默认同步范围，不再按 `Status`、`Collaboration` 或默认条数上限二次过滤。
 - 批量写入 Feishu 前先使用 `--dry-run`。
-- 已有 Communication Thread 永不重建或替换；同步仅追加尚未写入的新 Gmail 消息。新写入消息保存 Gmail message ID，旧文档通过内容签名兼容去重，从而保留人工高亮及其模板来源。
+- 已有 Communication Thread 永不重建或替换。同步只原位刷新顶部 `对接概括`、`Responce`、`Next Step` 三个受管快照段落，并仅追加尚未写入的新 Gmail 消息。新写入消息保存 Gmail message ID，旧文档通过内容签名兼容去重；任何 `Message N` 邮件 block、人工高亮和 `Next Draft` 都不被 PATCH、删除或重建。
 - Gmail Thread 写入 Communication Thread 时会去除回复里重复引用的历史邮件，保留可读的实际消息内容。
 - 只有 outgoing email 中人工高亮的文字可以成为模板证据；incoming 高亮和未高亮文字不能成为 reusable phrasing。
 - 每个连续高亮片段独立生成一份 Context 和 Template。同一封邮件中有多个分开的高亮，也不能合并。

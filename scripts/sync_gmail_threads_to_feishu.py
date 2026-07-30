@@ -6,7 +6,9 @@ Workflow:
 2. Search Gmail for a matching thread by Contact/domain.
 3. Append only Gmail messages not already present in the row's Communication Thread doc.
 4. Summarize the full thread into 对接概括 and summarize the latest partner
-   reply into Responce. Next Step remains human-authored guidance.
+   reply into Responce. Refresh the managed summary/Responce/Next Step snapshot
+   at the top of an existing Communication Thread without touching message or
+   draft blocks. Next Step remains human-authored guidance in Base.
 5. Detect every contiguous human-highlighted fragment in outgoing emails and,
    when present, deposit one reusable scenario and template per fragment.
 
@@ -54,6 +56,11 @@ FIELD_THREAD = "Communication Thread"
 FIELD_COLLABORATION = "Collaboration"
 FIELD_CONNECTION_SUMMARY = "对接概括"
 OUR_EMAIL_DOMAINS = ("zilliz.com", "milvus.io")
+THREAD_SNAPSHOT_SECTIONS = (
+    (FIELD_CONNECTION_SUMMARY, "对接概括", "[未生成]"),
+    (FIELD_RESPONSE, "Responce", "[未找到可读的对方回复]"),
+    (FIELD_NEXT_STEP, "Next Step", "[待人工填写；同步脚本不会自动覆盖此字段]"),
+)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -345,6 +352,34 @@ def append_blocks(token: str, doc_id: str, blocks: list[dict[str, Any]]) -> None
             raise RuntimeError(f"Failed to append doc blocks: {data}")
 
 
+def insert_blocks(
+    token: str,
+    doc_id: str,
+    parent_block_id: str,
+    index: int,
+    blocks: list[dict[str, Any]],
+) -> None:
+    data = requests.post(
+        f"{FEISHU_BASE}/docx/v1/documents/{doc_id}/blocks/{parent_block_id}/children",
+        headers=feishu_headers(token),
+        json={"children": blocks, "index": index},
+        timeout=30,
+    ).json()
+    if data.get("code") != 0:
+        raise RuntimeError(f"Failed to insert doc blocks: {data}")
+
+
+def update_text_block(token: str, doc_id: str, block_id: str, text: str) -> None:
+    data = requests.patch(
+        f"{FEISHU_BASE}/docx/v1/documents/{doc_id}/blocks/{block_id}",
+        headers=feishu_headers(token),
+        json={"update_text_elements": {"elements": text_elements(text)}},
+        timeout=20,
+    ).json()
+    if data.get("code") != 0:
+        raise RuntimeError(f"Failed to update document block {block_id}: {data}")
+
+
 def fetch_doc_raw_content(token: str, doc_id: str) -> str:
     if not doc_id:
         return ""
@@ -537,6 +572,113 @@ def visible_doc_text(blocks: list[dict[str, Any]]) -> str:
         for block in blocks
         if (text := rich_text_block(block)[0])
     )
+
+
+def thread_snapshot_values(fields: dict[str, Any]) -> dict[str, str]:
+    """Return the Base-backed values mirrored in the managed Thread snapshot."""
+    return {
+        field_name: extract_text(fields.get(field_name)) or empty_value
+        for field_name, _, empty_value in THREAD_SNAPSHOT_SECTIONS
+    }
+
+
+def plan_thread_snapshot_refresh(
+    blocks: list[dict[str, Any]],
+    doc_id: str,
+    fields: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Plan narrow snapshot edits without targeting email or draft blocks."""
+    siblings = [block for block in blocks if block.get("parent_id") == doc_id]
+    desired_values = thread_snapshot_values(fields)
+    plan: list[dict[str, Any]] = []
+
+    for field_name, heading_prefix, _ in THREAD_SNAPSHOT_SECTIONS:
+        heading_index = None
+        for index, block in enumerate(siblings):
+            text, _ = rich_text_block_runs(block)
+            block_type = int(block.get("block_type") or 0)
+            if 3 <= block_type <= 11 and text.strip().startswith(heading_prefix):
+                heading_index = index
+                break
+
+        desired_text = desired_values[field_name]
+        if heading_index is None:
+            plan.append(
+                {
+                    "field": field_name,
+                    "heading": heading_prefix,
+                    "action": "missing_heading",
+                    "text": desired_text,
+                }
+            )
+            continue
+
+        content_index = heading_index + 1
+        content_block = siblings[content_index] if content_index < len(siblings) else None
+        if content_block and int(content_block.get("block_type") or 0) == 2:
+            current_text, _ = rich_text_block_runs(content_block)
+            plan.append(
+                {
+                    "field": field_name,
+                    "heading": heading_prefix,
+                    "action": "unchanged" if current_text == desired_text else "update",
+                    "block_id": content_block.get("block_id", ""),
+                    "text": desired_text,
+                }
+            )
+            continue
+
+        plan.append(
+            {
+                "field": field_name,
+                "heading": heading_prefix,
+                "action": "insert",
+                "parent_block_id": doc_id,
+                "index": content_index,
+                "text": desired_text,
+            }
+        )
+    return plan
+
+
+def apply_thread_snapshot_refresh(
+    token: str,
+    doc_id: str,
+    plan: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """Apply only managed snapshot edits; never mutate message or draft blocks."""
+    result: dict[str, list[str]] = {
+        "updated": [],
+        "inserted": [],
+        "unchanged": [],
+        "missing_heading": [],
+    }
+    for item in plan:
+        action = item.get("action", "")
+        field_name = str(item.get("field") or "")
+        if action == "update":
+            update_text_block(token, doc_id, str(item.get("block_id") or ""), item["text"])
+            result["updated"].append(field_name)
+        elif action == "unchanged":
+            result["unchanged"].append(field_name)
+        elif action == "missing_heading":
+            result["missing_heading"].append(field_name)
+
+    insertions = sorted(
+        (item for item in plan if item.get("action") == "insert"),
+        key=lambda item: int(item.get("index") or 0),
+        reverse=True,
+    )
+    for item in insertions:
+        insert_blocks(
+            token,
+            doc_id,
+            str(item.get("parent_block_id") or doc_id),
+            int(item.get("index") or 0),
+            [text_block(item["text"])],
+        )
+        result["inserted"].append(str(item.get("field") or ""))
+    return result
 
 
 def template_evidence_id(section: str) -> str:
@@ -1801,6 +1943,7 @@ def sync(args: argparse.Namespace) -> None:
 
         existing_thread_url = extract_url(fields.get(FIELD_THREAD))
         existing_doc_id = doc_id_from_url(existing_thread_url)
+        existing_doc_blocks: list[dict[str, Any]] = []
         highlighted_emails: list[str] = []
         existing_doc_text = ""
         if existing_doc_id:
@@ -1834,6 +1977,12 @@ def sync(args: argparse.Namespace) -> None:
             fields[FIELD_CONNECTION_SUMMARY] = connection_summary
         if latest_response_summary:
             fields[FIELD_RESPONSE] = latest_response_summary
+
+        snapshot_plan = (
+            plan_thread_snapshot_refresh(existing_doc_blocks, existing_doc_id, fields)
+            if existing_doc_id
+            else []
+        )
 
         pattern_summary = generate_pattern_summary(
             config,
@@ -1878,7 +2027,7 @@ def sync(args: argparse.Namespace) -> None:
         if args.dry_run:
             if existing_doc_id:
                 print(f"New Gmail messages to append: {len(new_messages)}")
-            print(markdown[:2500] if markdown else "Communication Thread unchanged; no new Gmail messages.")
+            print(markdown[:2500] if markdown else "No new Gmail messages to append.")
             planned_fields = {}
             if connection_summary:
                 planned_fields[FIELD_CONNECTION_SUMMARY] = connection_summary
@@ -1886,12 +2035,37 @@ def sync(args: argparse.Namespace) -> None:
                 planned_fields[FIELD_RESPONSE] = latest_response_summary
             print("\nPlanned Base field updates:")
             print(json.dumps(planned_fields, ensure_ascii=False, indent=2))
+            if snapshot_plan:
+                print("\nPlanned Communication Thread snapshot refresh:")
+                print(
+                    json.dumps(
+                        [
+                            {
+                                "field": item.get("field", ""),
+                                "action": item.get("action", ""),
+                                "text": item.get("text", ""),
+                            }
+                            for item in snapshot_plan
+                        ],
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
             print("\n--- dry run; not writing Feishu ---")
             if pattern_item:
                 pattern_items.append(pattern_item)
             continue
 
         doc_id, url = ensure_thread_doc(token, config, base_url, record)
+        snapshot_result: dict[str, list[str]] = {}
+        if existing_doc_id and snapshot_plan:
+            try:
+                snapshot_result = apply_thread_snapshot_refresh(token, doc_id, snapshot_plan)
+            except Exception as exc:
+                print(
+                    f"warning: could not refresh managed Thread snapshot for {domain}: {exc}",
+                    file=sys.stderr,
+                )
         if markdown:
             append_blocks(token, doc_id, markdown_to_blocks(markdown))
         record_updates: dict[str, Any] = {}
@@ -1911,7 +2085,17 @@ def sync(args: argparse.Namespace) -> None:
             if new_messages:
                 print(f"  appended {len(new_messages)} new Gmail message(s) to {url}")
             else:
-                print(f"  no new Gmail messages; Communication Thread unchanged at {url}")
+                print(f"  no new Gmail messages to append at {url}")
+            if snapshot_result:
+                refreshed = snapshot_result.get("updated", []) + snapshot_result.get("inserted", [])
+                if refreshed:
+                    print(f"  refreshed managed Thread snapshot: {', '.join(refreshed)}")
+                if snapshot_result.get("missing_heading"):
+                    print(
+                        "  warning: managed Thread heading(s) not found: "
+                        + ", ".join(snapshot_result["missing_heading"]),
+                        file=sys.stderr,
+                    )
         else:
             print(f"  created initial Communication Thread with {len(messages)} Gmail message(s) at {url}")
 

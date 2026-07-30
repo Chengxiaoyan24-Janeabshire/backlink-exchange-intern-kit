@@ -256,6 +256,131 @@ This body was manually highlighted or edited after the original sync.
         self.assertIn("Only the new message", markdown)
         self.assertNotIn("Message 1", markdown)
 
+    def test_snapshot_refresh_updates_managed_blocks_and_inserts_missing_next_step(self):
+        def block(block_id, text, block_type, parent_id="doc1", background_color=0):
+            key = {2: "text", 4: "heading2", 5: "heading3"}[block_type]
+            return {
+                "block_id": block_id,
+                "parent_id": parent_id,
+                "block_type": block_type,
+                key: {
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": text,
+                                "text_element_style": {"background_color": background_color},
+                            }
+                        }
+                    ]
+                },
+            }
+
+        highlighted_message = block(
+            "message-body",
+            "Approved reusable wording.",
+            2,
+            background_color=2,
+        )
+        blocks = [
+            {"block_id": "doc1", "parent_id": "", "block_type": 1},
+            block("summary-heading", "对接概括", 4),
+            block("summary-value", "Old summary", 2),
+            block("response-heading", "Responce（最新一封对方回复概括）", 4),
+            block("response-value", "Old response", 2),
+            block("next-step-heading", "Next Step（人工输入下一步目标）", 4),
+            block("audit-heading", "Gmail Match Audit", 4),
+            block("message-heading", "Message 1", 5),
+            highlighted_message,
+        ]
+        fields = {
+            "对接概括": "New summary",
+            "Responce": "New response",
+            "Next Step": "Human-authored next step",
+        }
+
+        plan = gmail_sync.plan_thread_snapshot_refresh(blocks, "doc1", fields)
+
+        self.assertEqual(
+            [(item["field"], item["action"]) for item in plan],
+            [("对接概括", "update"), ("Responce", "update"), ("Next Step", "insert")],
+        )
+        self.assertEqual(plan[0]["block_id"], "summary-value")
+        self.assertEqual(plan[1]["block_id"], "response-value")
+        self.assertEqual(plan[2]["index"], 5)
+        self.assertNotIn("message-body", {item.get("block_id") for item in plan})
+        self.assertEqual(gmail_sync.rich_text_block(highlighted_message), ("Approved reusable wording.", True))
+
+    def test_apply_snapshot_refresh_only_writes_planned_managed_blocks(self):
+        response = mock.Mock()
+        response.json.return_value = {"code": 0, "data": {}}
+        plan = [
+            {
+                "field": "对接概括",
+                "action": "update",
+                "block_id": "summary-value",
+                "text": "New summary",
+            },
+            {
+                "field": "Responce",
+                "action": "unchanged",
+                "block_id": "response-value",
+                "text": "Same response",
+            },
+            {
+                "field": "Next Step",
+                "action": "insert",
+                "parent_block_id": "doc1",
+                "index": 5,
+                "text": "Human next step",
+            },
+        ]
+
+        with mock.patch.object(gmail_sync.requests, "patch", return_value=response) as patch_request, mock.patch.object(
+            gmail_sync.requests, "post", return_value=response
+        ) as post_request:
+            result = gmail_sync.apply_thread_snapshot_refresh("token", "doc1", plan)
+
+        self.assertEqual(result["updated"], ["对接概括"])
+        self.assertEqual(result["inserted"], ["Next Step"])
+        self.assertEqual(result["unchanged"], ["Responce"])
+        self.assertEqual(patch_request.call_count, 1)
+        self.assertTrue(patch_request.call_args.args[0].endswith("/blocks/summary-value"))
+        self.assertEqual(
+            patch_request.call_args.kwargs["json"],
+            {"update_text_elements": {"elements": gmail_sync.text_elements("New summary")}},
+        )
+        self.assertEqual(post_request.call_count, 1)
+        self.assertTrue(post_request.call_args.args[0].endswith("/blocks/doc1/children"))
+        self.assertEqual(post_request.call_args.kwargs["json"]["index"], 5)
+
+    def test_snapshot_refresh_skips_values_that_already_match(self):
+        def block(block_id, text, block_type):
+            key = {2: "text", 4: "heading2"}[block_type]
+            return {
+                "block_id": block_id,
+                "parent_id": "doc1",
+                "block_type": block_type,
+                key: {"elements": gmail_sync.text_elements(text)},
+            }
+
+        fields = {
+            "对接概括": "Same summary",
+            "Responce": "Same response",
+            "Next Step": "Same next step",
+        }
+        blocks = [
+            block("summary-heading", "对接概括", 4),
+            block("summary-value", "Same summary", 2),
+            block("response-heading", "Responce（最新一封对方回复概括）", 4),
+            block("response-value", "Same response", 2),
+            block("next-heading", "Next Step（人工输入下一步目标）", 4),
+            block("next-value", "Same next step", 2),
+        ]
+
+        plan = gmail_sync.plan_thread_snapshot_refresh(blocks, "doc1", fields)
+
+        self.assertTrue(all(item["action"] == "unchanged" for item in plan))
+
 
 class HighlightAndQueryTests(unittest.TestCase):
     def test_extract_url_prefers_rich_link_target_over_display_text(self):

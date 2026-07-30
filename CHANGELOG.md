@@ -10,6 +10,16 @@
 4. 每条 bullet 说明新增或改变了什么能力、行为或用户结果，不写成文件名清单。
 5. Change Log 与对应代码或文档放在同一批 commit 中，不能在功能推送后再补。
 
+## 2026-07-30 — Communication Thread 受管快照刷新
+
+### Changed
+
+- 已有 Communication Thread 会从当前 Base 记录原位刷新顶部 `对接概括`、`Responce` 和 `Next Step` 镜像；Gmail 邮件历史与 `Next Draft` 继续保持只追加。
+
+### Fixed
+
+- 修复增量同步后 Thread 顶部仍停留在初始总结和旧 Next Step 的问题。同步只更新三个受管段落，不修改、删除或重建任何邮件、高亮来源或 Draft block。
+
 ## 2026-07-29 — 链接目标与模板证据拆分
 
 ### Changed
