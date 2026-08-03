@@ -6,9 +6,10 @@ Workflow:
 2. Search Gmail for a matching thread by Contact/domain.
 3. Append only Gmail messages not already present in the row's Communication Thread doc.
 4. Summarize the full thread into 对接概括 and summarize the latest partner
-   reply into Responce. Refresh the managed summary/Responce/Next Step snapshot
-   at the top of an existing Communication Thread without touching message or
-   draft blocks. Next Step remains human-authored guidance in Base.
+   reply into Responce. Write the newest matched Gmail message time into Last
+   Touch. Refresh the managed summary/Responce/Next Step snapshot at the top of
+   an existing Communication Thread without touching message or draft blocks.
+   Next Step remains human-authored guidance in Base.
 5. Detect every contiguous human-highlighted fragment in outgoing emails and,
    when present, deposit one reusable scenario and template per fragment.
 
@@ -52,6 +53,7 @@ FIELD_CONTACT = "Contact"
 FIELD_STATUS = "Status"
 FIELD_NEXT_STEP = "Next Step"
 FIELD_RESPONSE = "Responce"  # Kept as-is because the Bitable field is misspelled.
+FIELD_LAST_TOUCH = "Last Touch"
 FIELD_THREAD = "Communication Thread"
 FIELD_COLLABORATION = "Collaboration"
 FIELD_CONNECTION_SUMMARY = "对接概括"
@@ -171,6 +173,31 @@ def extract_url(value: Any) -> str:
                 return found
         return ""
     return ""
+
+
+def coerce_milliseconds(value: Any) -> int:
+    """Normalize a Feishu/Gmail millisecond value for idempotent comparisons."""
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.strip()))
+        except ValueError:
+            return 0
+    return 0
+
+
+def latest_thread_touch_ms(thread: dict[str, Any]) -> int:
+    """Return the newest Gmail internal timestamp across incoming and sent mail."""
+    return max(
+        (
+            coerce_milliseconds(message.get("internal_ms"))
+            for message in thread.get("messages") or []
+        ),
+        default=0,
+    )
 
 
 def list_records(
@@ -1105,6 +1132,8 @@ def build_gmail_queries(record_fields: dict[str, Any], args: argparse.Namespace)
     if args.gmail_query:
         return [args.gmail_query]
     contact, email_addr, domain = record_contact_and_domain(record_fields)
+    if not (contact or email_addr or domain):
+        return []
     freshness = f"newer_than:{args.newer_than}" if args.newer_than else ""
     address_term = f"(from:{email_addr} OR to:{email_addr})" if email_addr else ""
     domain_term = f'("{domain}" OR from:{domain} OR to:{domain})' if domain else ""
@@ -1994,6 +2023,11 @@ def sync(args: argparse.Namespace) -> None:
         if args.pattern_doc_url and not pattern_summary:
             print(f"  template deposit skipped: {len(highlighted_emails)} new human-highlighted fragment(s)")
         messages = thread.get("messages") or []
+        last_touch_ms = latest_thread_touch_ms(thread)
+        last_touch_changed = bool(
+            last_touch_ms
+            and last_touch_ms != coerce_milliseconds(fields.get(FIELD_LAST_TOUCH))
+        )
         new_messages = select_new_messages(messages, existing_doc_text)
         if existing_doc_id:
             markdown = incremental_thread_markdown(
@@ -2033,6 +2067,8 @@ def sync(args: argparse.Namespace) -> None:
                 planned_fields[FIELD_CONNECTION_SUMMARY] = connection_summary
             if latest_response_summary:
                 planned_fields[FIELD_RESPONSE] = latest_response_summary
+            if last_touch_changed:
+                planned_fields[FIELD_LAST_TOUCH] = last_touch_ms
             print("\nPlanned Base field updates:")
             print(json.dumps(planned_fields, ensure_ascii=False, indent=2))
             if snapshot_plan:
@@ -2075,6 +2111,8 @@ def sync(args: argparse.Namespace) -> None:
             record_updates[FIELD_CONNECTION_SUMMARY] = connection_summary
         if latest_response_summary:
             record_updates[FIELD_RESPONSE] = latest_response_summary
+        if last_touch_changed:
+            record_updates[FIELD_LAST_TOUCH] = last_touch_ms
         if record_updates:
             update_record_fields(token, app_token, table_id, rid, record_updates)
         if pattern_item:

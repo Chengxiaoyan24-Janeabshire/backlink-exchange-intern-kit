@@ -10,6 +10,22 @@
 4. 每条 bullet 说明新增或改变了什么能力、行为或用户结果，不写成文件名清单。
 5. Change Log 与对应代码或文档放在同一批 commit 中，不能在功能推送后再补。
 
+## 2026-08-03 — Evaluation 指标与 Last Touch 写回
+
+### Added
+
+- 完整 Evaluation 会从 tracker 的 SEO Screenshot 提取可见 authority 与 organic traffic，并按线上惯例写入 `Website Stat`；Evaluation Doc 继续保留真实 provider 指标名。
+- Gmail sync 会把匹配 Thread 中最新一封收件或发件消息的时间写入 `Last Touch`。
+
+### Changed
+
+- `Last Touch` 使用 Gmail message internal timestamp 并进行幂等比较，不再需要人工根据同步时间补录。
+- Gmail 同步运行说明补充模板 Wiki 编辑权限和 `1770032` 恢复流程，避免主记录已成功写入后重复同步或重复沉淀证据。
+
+### Fixed
+
+- Gmail sync 遇到没有 Domain、Contact 或其他合作方标识的空行时会安全跳过，不再退化为全邮箱时间范围查询并误匹配无关邮件。
+
 ## 2026-07-30 — Communication Thread 受管快照刷新
 
 ### Changed

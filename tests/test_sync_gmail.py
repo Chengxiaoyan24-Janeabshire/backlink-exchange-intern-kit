@@ -256,6 +256,22 @@ This body was manually highlighted or edited after the original sync.
         self.assertIn("Only the new message", markdown)
         self.assertNotIn("Message 1", markdown)
 
+    def test_latest_thread_touch_uses_newest_gmail_internal_timestamp(self):
+        thread = {
+            "messages": [
+                {"internal_ms": 1777020408000},
+                {"internal_ms": "1777020413000"},
+                {"internal_ms": 0},
+            ]
+        }
+
+        self.assertEqual(gmail_sync.latest_thread_touch_ms(thread), 1777020413000)
+
+    def test_millisecond_normalization_supports_existing_feishu_values(self):
+        self.assertEqual(gmail_sync.coerce_milliseconds(1777020413000), 1777020413000)
+        self.assertEqual(gmail_sync.coerce_milliseconds("1777020413000"), 1777020413000)
+        self.assertEqual(gmail_sync.coerce_milliseconds(None), 0)
+
     def test_snapshot_refresh_updates_managed_blocks_and_inserts_missing_next_step(self):
         def block(block_id, text, block_type, parent_id="doc1", background_color=0):
             key = {2: "text", 4: "heading2", 5: "heading3"}[block_type]
@@ -630,6 +646,11 @@ class HighlightAndQueryTests(unittest.TestCase):
         self.assertGreaterEqual(len(queries), 3)
         self.assertIn("from:info@example.com", queries[0])
         self.assertTrue(any("from:example.com" in query for query in queries))
+
+    def test_query_builder_skips_rows_without_partner_identifiers(self):
+        args = argparse.Namespace(gmail_query="", newer_than="2y")
+
+        self.assertEqual(gmail_sync.build_gmail_queries({}, args), [])
 
 
 class SyncScopeTests(unittest.TestCase):

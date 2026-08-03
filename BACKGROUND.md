@@ -44,9 +44,13 @@ Accept only indexable, dofollow, in-body placements. Reject sponsored, nofollow,
 
 The Evaluation contains Company & Service Overview, Backlink Health, five partner Blog candidates, our one-to-two Blog plus three AI Quick Reference candidates, and Placement Requirements. It does not contain Decision, Best Bilateral Placement, Missing Information, or a reply draft.
 
+When the tracker row includes an SEO screenshot, transcribe only visible authority and organic-traffic values into `Website Stat` as `DA:<value> OT:<value>`, matching the existing tracker convention. `DA` is legacy field shorthand; the Evaluation document must preserve the provider's actual metric label and must not present SEMrush Authority Score as Moz DA. Use `N/A` when the screenshot explicitly shows the value as unavailable.
+
 ## Communication and Templates
 
 `Next Step` is human-authored. Gmail sync never overwrites it and does not create an outbound draft automatically.
+
+Gmail sync updates `Last Touch` to the newest matched Gmail message timestamp across both incoming and outgoing mail. It must not use the sync execution time.
 
 Existing Communication Thread documents must never be rebuilt or replaced. Gmail message history and `Next Draft` blocks are immutable append-only history. Sync may refresh only the top managed `对接概括`, `Responce`, and `Next Step` snapshot paragraphs from the current Base row; it must not patch any message or draft block. This preserves manually highlighted template evidence and its source wording while keeping the Thread's current-state snapshot accurate.
 

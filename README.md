@@ -25,7 +25,7 @@
    │   └─ sync-backlink-gmail
    │       ├─ 匹配 Organic Exchange row 与 Gmail Thread
    │       ├─ 清理重复引用并追加 Communication Thread 邮件历史
-   │       ├─ 更新 Base 的 对接概括 和 Responce，并刷新 Thread 顶部的 对接概括 / Responce / Next Step 镜像
+   │       ├─ 更新 Base 的 对接概括、Responce 和 Last Touch，并刷新 Thread 顶部的 对接概括 / Responce / Next Step 镜像
    │       └─ 把每个新高亮片段分别沉淀到模板 Wiki
    │
    └─ 起草下一封回复
@@ -63,15 +63,18 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 |---|---|---|
 | `对接概括` | Gmail sync 自动更新 | 完整沟通进展的简要概括 |
 | `Responce` | Gmail sync 自动更新 | 最新一封合作方回复的概括；拼写与线上 Bitable 字段保持一致 |
+| `Last Touch` | Gmail sync 自动更新 | 匹配 Gmail Thread 中最新一封收件或发件消息的时间；不使用同步执行时间 |
 | `Next Step` | 人工维护 | 下一封回复要达成的目标，自动化永远不能覆盖 Base 原值；Thread 顶部只做当前值镜像 |
 | `Communication Thread` | Gmail sync 维护 | 顶部受管快照原位刷新；邮件历史、高亮来源和 Next Draft 只追加、不重写 |
 | `Next Draft` | `draft-backlink-reply` 人工触发 | 根据 Next Step 和已验证 Thread 生成的下一封草稿 |
 | `Evaluation` | 完整评估流程写入 | 合作方 Evaluation Doc 链接 |
+| `Website Stat` | 完整评估流程写入 | 从 Screenshot 可见值提取，按现有格式写为 `DA:<value> OT:<value>`；Evaluation Doc 仍保留真实 provider 指标名 |
 
 ## 4. Evaluation 与 Placement 标准
 
 - Health assessment 比较完整的 `https://milvus.io/`、`https://zilliz.com/` 和合作方域名。
 - Moz DA、Ahrefs DR、SEMrush Authority Score 等指标必须保留 provider 标签，不能当作同一个数值比较。
+- Tracker 的 `Website Stat` 使用历史简写 `DA:<value> OT:<value>`；若截图是 SEMrush，Evaluation 正文仍写 `SEMrush Authority Score`，不能改称 Moz DA。截图明确显示不可用时写 `N/A`。
 - 对方候选必须是可索引的真实 Blog 内容；不接受 homepage、product/service、company、contact、directory、partner 或 generic resource-list 页面。
 - 对方在候选 Blog 中添加我们的链接时，链接目标必须是相关的非 FAQ Milvus/Zilliz 页面；Zilliz AI FAQ、Milvus AI Quick Reference 及其他 FAQ/reference-style 页面都不能作为这一侧的目标。
 - 我方 Blog 候选只来自 `zilliz.com/blog/` 或 `milvus.io/blog/`，排除产品发布、功能公告、Featured collection 和 sponsored-style 内容。
@@ -90,6 +93,8 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 - 每个连续高亮片段独立生成一份 Context 和 Template。同一封邮件中有多个分开的高亮，也不能合并。
 - 完整邮件和 Thread 只用于推断高亮片段的适用场景，不能把未高亮措辞混入模板。
 - 已沉淀的高亮证据通过稳定 evidence ID 去重，后续同步不会重复写入同一份模板。
+- 模板沉淀要求运行时 Feishu app 对模板 Wiki 有编辑权限。如果末尾沉淀阶段返回 `1770032`，先回读确认此前 Base/Thread 更新是否已经成功，再使用有权限的 user identity 补写对应 evidence ID，最后重跑 dry run 验证邮件、`Last Touch` 和模板证据都已幂等收口。
+- 没有 Domain、Contact 或其他合作方标识的行会在 Gmail 搜索前安全跳过，不会退化成仅按时间范围搜索整个邮箱。
 
 ## 6. 主要目录
 
