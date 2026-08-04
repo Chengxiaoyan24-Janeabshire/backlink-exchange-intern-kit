@@ -159,7 +159,10 @@ Previous message body
 
         markdown = gmail_sync.thread_markdown(record, "query", thread)
 
-        self.assertIn("Gmail message ID: gmail-message-1", markdown)
+        self.assertIn("Gmail 邮件 ID：gmail-message-1", markdown)
+        self.assertIn("Gmail 同步记录", markdown)
+        self.assertIn("对方最新回复概括（Responce）", markdown)
+        self.assertIn("下一步（Next Step，人工输入）", markdown)
 
     def test_incremental_sync_selects_only_unseen_message_ids(self):
         messages = [
@@ -251,10 +254,28 @@ This body was manually highlighted or edited after the original sync.
             new_messages,
         )
 
-        self.assertIn("Message 3", markdown)
+        self.assertIn("邮件 3", markdown)
         self.assertIn("gmail-message-3", markdown)
         self.assertIn("Only the new message", markdown)
-        self.assertNotIn("Message 1", markdown)
+        self.assertNotIn("邮件 1", markdown)
+
+    def test_incremental_sync_recognizes_chinese_message_headers(self):
+        message = {
+            "id": "gmail-message-1",
+            "date": "Thu, 9 Jul 2026 07:37:11 -0400",
+            "from": "Jane Jiang <jane.jiang@zilliz.com>",
+            "to": "Partner <partner@example.com>",
+            "cc": "",
+            "body": "The original email body.",
+        }
+        existing = """邮件 1
+Gmail 邮件 ID：gmail-message-1
+日期：Thu, 9 Jul 2026 07:37:11 -0400
+发件人：Jane Jiang <jane.jiang@zilliz.com>
+收件人：Partner <partner@example.com>
+"""
+
+        self.assertEqual(gmail_sync.select_new_messages([message], existing), [])
 
     def test_latest_thread_touch_uses_newest_gmail_internal_timestamp(self):
         thread = {
@@ -436,6 +457,34 @@ class HighlightAndQueryTests(unittest.TestCase):
         self.assertIn("Approved reusable wording", sections[0])
         self.assertNotIn("Incoming context", sections[0])
 
+    def test_chinese_message_heading_and_sender_are_template_evidence_compatible(self):
+        def block(text, block_type=2, background_color=0):
+            key = {2: "text", 5: "heading3"}[block_type]
+            return {
+                "block_type": block_type,
+                key: {
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": text,
+                                "text_element_style": {"background_color": background_color},
+                            }
+                        }
+                    ]
+                },
+            }
+
+        sections = gmail_sync.extract_highlighted_email_sections(
+            [
+                block("邮件 2", 5),
+                block("发件人：Jane <jane@zilliz.com>"),
+                block("Approved reusable wording.", background_color=2),
+            ]
+        )
+
+        self.assertEqual(len(sections), 1)
+        self.assertIn("Approved reusable wording", sections[0])
+
     def test_each_contiguous_highlight_becomes_independent_template_evidence(self):
         def block(text, block_type=2, background_color=0):
             key = {2: "text", 5: "heading3", 13: "ordered"}[block_type]
@@ -611,13 +660,133 @@ class HighlightAndQueryTests(unittest.TestCase):
             {"fields": {"Domain": "pureinsights.com"}},
             {"messages": []},
             fragments,
+            source_url="https://example.feishu.cn/docx/thread1",
         )
 
-        self.assertEqual(summary.count("Reusable template:"), 2)
-        self.assertIn("Highlighted fragment 1", summary)
-        self.assertIn("Highlighted fragment 2", summary)
+        self.assertEqual(summary.count("### Reusable reply template"), 2)
+        self.assertEqual(summary.count("**Evidence ID:**"), 2)
+        self.assertEqual(summary.count("**Source Communication Thread:**"), 2)
+        self.assertIn("Please send a topic proposal for the co-created content", summary)
         self.assertIn("brief outline", summary)
-        self.assertIn("Milvus AI Quick Reference", summary)
+        self.assertNotIn("Hi [Name]", summary)
+        self.assertNotIn("Milvus AI Quick Reference", summary)
+        self.assertIn("https://example.feishu.cn/docx/thread1", summary)
+
+    def test_template_uses_exact_highlight_with_only_core_fields_replaced(self):
+        fragment = (
+            "Message 8\nFrom: Jane <jane@zilliz.com>\nHighlighted excerpt:\n"
+            "That's great, thank you so much. I've proposed the exchange requirement to\n"
+            "our content team, and you can expect the insertion completed on our side\n"
+            "before next Tuesday."
+        )
+
+        summary = gmail_sync.heuristic_pattern_summary(
+            {"fields": {"Domain": "bigdataboutique.com"}},
+            {"messages": []},
+            [fragment],
+        )
+
+        self.assertIn(
+            "That's great, thank you so much. I've proposed the exchange requirement to\n"
+            "our content team, and you can expect the insertion completed on our side\n"
+            "before [confirmed date].",
+            summary,
+        )
+        self.assertNotIn("Hi [Name]", summary)
+        self.assertNotIn("Best,", summary)
+
+    def test_template_replacement_must_be_exact_source_substring(self):
+        excerpt = "Our pages have been updated accordingly."
+        result = gmail_sync.parameterize_highlighted_excerpt(
+            excerpt,
+            {"fields": {"Domain": "example.com"}},
+            [
+                {"source": "pages were updated", "placeholder": "[content page]"},
+                {"source": "Our pages", "placeholder": "[content page]"},
+            ],
+        )
+
+        self.assertEqual(result, "[content page] have been updated accordingly.")
+
+    def test_ai_metadata_cannot_inject_template_wording(self):
+        fragment = (
+            "Message 9\nFrom: Jane <jane@zilliz.com>\nHighlighted excerpt:\n"
+            "Our pages have been updated accordingly. You can check them out now."
+        )
+        response = mock.Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"templates":[{"index":1,"title":"Completed placement",'
+                            '"context":"Use after completion.",'
+                            '"template":"Invented greeting and sign-off.",'
+                            '"replacements":[{"source":"Our pages",'
+                            '"placeholder":"[content pages]"}]}]}'
+                        )
+                    }
+                }
+            ]
+        }
+
+        with mock.patch.object(gmail_sync.requests, "post", return_value=response):
+            summary = gmail_sync.generate_ai_pattern_summary(
+                {"openrouter_api_key": "test-key"},
+                {"fields": {"Domain": "example.com"}},
+                {"messages": []},
+                "test-model",
+                [fragment],
+            )
+
+        self.assertIn(
+            "[content pages] have been updated accordingly. You can check them out now.",
+            summary,
+        )
+        self.assertNotIn("Invented greeting", summary)
+
+    def test_pattern_doc_contains_only_curated_template_entries(self):
+        summary = (
+            "## Reusable highlighted reply\n\n"
+            "**Scenario / context:** Context\n\n"
+            "**Evidence ID:** `abc123`\n\n"
+            "### Reusable reply template\n\n```text\nApproved wording.\n```"
+        )
+        markdown = gmail_sync.pattern_doc_markdown(
+            [{"summary": summary}],
+            {},
+            "unused-model",
+        )
+
+        self.assertEqual(markdown, summary)
+        self.assertNotIn("Cross-thread Observed Patterns", markdown)
+        self.assertNotIn("Thread-level Evidence", markdown)
+
+    def test_template_markdown_preserves_curated_label_and_source_styles(self):
+        blocks = gmail_sync.template_markdown_to_blocks(
+            "## Scenario\n\n"
+            "**Evidence ID:** `abc123`\n\n"
+            "**Source Communication Thread:** "
+            "[example.com — Message 2 highlighted fragment](https://example.feishu.cn/docx/thread1)\n\n"
+            "### Reusable reply template\n\n```text\nApproved wording.\n```"
+        )
+
+        self.assertEqual(blocks[0]["block_type"], 4)
+        evidence_elements = blocks[1]["text"]["elements"]
+        self.assertTrue(evidence_elements[0]["text_run"]["text_element_style"]["bold"])
+        self.assertTrue(evidence_elements[-1]["text_run"]["text_element_style"]["inline_code"])
+        source_elements = blocks[2]["text"]["elements"]
+        self.assertEqual(
+            source_elements[-1]["text_run"]["text_element_style"]["link"]["url"],
+            "https://example.feishu.cn/docx/thread1",
+        )
+        self.assertEqual(blocks[3]["block_type"], 5)
+        self.assertEqual(blocks[4]["block_type"], 14)
+        self.assertEqual(
+            blocks[4]["code"]["elements"][0]["text_run"]["content"],
+            "Approved wording.",
+        )
 
     def test_thread_markdown_has_no_context_markers(self):
         record = {"record_id": "rec1", "fields": {"Domain": "example.com"}}

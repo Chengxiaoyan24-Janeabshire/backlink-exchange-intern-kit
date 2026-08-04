@@ -10,6 +10,19 @@
 4. 每条 bullet 说明新增或改变了什么能力、行为或用户结果，不写成文件名清单。
 5. Change Log 与对应代码或文档放在同一批 commit 中，不能在功能推送后再补。
 
+## 2026-08-04 — Evaluation 我方域名基准
+
+### Added
+
+- 每份未来 Evaluation 的 `外链健康度` 固定加入 Milvus 与 Zilliz 的全域名基准，覆盖 Moz DA、月自然访问、Referring Domains 和 Backlinks，并标注为用户于 2026-08-04 提供的数据。
+- 模板 Wiki 的新证据采用固定单条格式：场景标题、Context、Evidence ID、Communication Thread 来源链接和 Reusable Template，不再追加 batch summary 或自动合成的跨 thread 模板。
+
+### Changed
+
+- 跨 provider 比较必须保留指标来源差异；未指定来源的流量、Referring Domains 和 Backlinks 不再擅自归属到 SEMrush、Ahrefs 或其他 provider。
+- 我方域名基准只用于 Evaluation 正文，不写入合作方 Screenshot 驱动的 `Website Stat` 字段。
+- Reusable Template 改为由黄色高亮原文确定性生成；AI 只建议场景信息和精确子串字段化，不能再扩写高亮之外的称呼、问题、承诺、解释或落款。
+
 ## 2026-08-03 — Evaluation 指标与 Last Touch 写回
 
 ### Added
@@ -21,10 +34,12 @@
 
 - `Last Touch` 使用 Gmail message internal timestamp 并进行幂等比较，不再需要人工根据同步时间补录。
 - Gmail 同步运行说明补充模板 Wiki 编辑权限和 `1770032` 恢复流程，避免主记录已成功写入后重复同步或重复沉淀证据。
+- Evaluation 文档，以及 Communication Thread 中由 Agent 生成的标题、摘要、审计标签和说明文字，统一使用中文；URL、provider 指标名、精确英文 placement 文案、Gmail 原文与人工高亮证据保持原样。
 
 ### Fixed
 
 - Gmail sync 遇到没有 Domain、Contact 或其他合作方标识的空行时会安全跳过，不再退化为全邮箱时间范围查询并误匹配无关邮件。
+- Communication Thread 改用中文邮件标题和头部标签后，仍兼容旧英文 `Message`、`From` 和 Gmail message ID 标记，避免增量去重或高亮模板提取失效。
 
 ## 2026-07-30 — Communication Thread 受管快照刷新
 

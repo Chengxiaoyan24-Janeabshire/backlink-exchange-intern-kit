@@ -3,12 +3,15 @@
 > 基本规则
 >
 > - 评估规则：合作方健康度必须与完整的 `milvus.io` 和 `zilliz.com` 域名比较，不混用不同 SEO provider 的指标。
+> - 我方基准：每份 Evaluation 的 `外链健康度` 必须包含 Milvus（Moz DA 45、月自然访问 130.2K、Referring Domains 7K、Backlinks 488.4K）和 Zilliz（Moz DA 36、月自然访问约 19.7K、Referring Domains 4.3K、Backlinks 318K+）的固定全域名数据。
 > - 对方页面规则：正好推荐 5 篇真实 Blog，优先 2025 或 2026 年内容，并给出 section、anchor 和句子级插入建议。
 > - 对方链接目标规则：对方给我们加链接时，目标必须是相关的非 FAQ Milvus/Zilliz 页面；禁止使用 Zilliz AI FAQ、Milvus AI Quick Reference 或其他 FAQ/reference-style 页面。
 > - 我方页面规则：推荐 1–2 篇 Zilliz/Milvus Blog，加正好 3 篇 Milvus AI Quick Reference。
 > - Placement 规则：只接受 indexable、dofollow、正文内且语义自然的链接；拒绝 sponsored、nofollow、noindex、footer、sidebar 和目录页。
 > - Gmail 规则：同步更新 Base 自动摘要并刷新 Thread 顶部受管快照；人工填写的 Base `Next Step`、邮件高亮来源和 `Next Draft` 不会被覆盖，也不会自动生成回复。
 > - 模板规则：每个 outgoing email 中连续的人工高亮片段都是独立证据，分别生成自己的 Context 和 reusable Template。
+> - 模板原句规则：Reusable Template 只能使用黄色高亮原句；除把公司、内容、页面、URL、时间等核心对象替换为 `[字段]` 外，不得改写、扩写或加入未高亮的称呼、问题和结尾。
+> - 语言规则：Evaluation 文档，以及 Communication Thread 中由 Agent 生成的标题、摘要、审计标签和说明文字，必须使用中文；URL、指标名称、英文锚文本/插入句、Gmail 原文与人工高亮证据保持原样。
 
 ## 1. 整个 Agent 的逻辑
 
@@ -65,7 +68,7 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 | `Responce` | Gmail sync 自动更新 | 最新一封合作方回复的概括；拼写与线上 Bitable 字段保持一致 |
 | `Last Touch` | Gmail sync 自动更新 | 匹配 Gmail Thread 中最新一封收件或发件消息的时间；不使用同步执行时间 |
 | `Next Step` | 人工维护 | 下一封回复要达成的目标，自动化永远不能覆盖 Base 原值；Thread 顶部只做当前值镜像 |
-| `Communication Thread` | Gmail sync 维护 | 顶部受管快照原位刷新；邮件历史、高亮来源和 Next Draft 只追加、不重写 |
+| `Communication Thread` | Gmail sync 维护 | 顶部 `对接概括`、`对方最新回复概括（Responce）`、`下一步（Next Step）` 受管快照原位刷新；邮件历史、高亮来源和 Next Draft 只追加、不重写 |
 | `Next Draft` | `draft-backlink-reply` 人工触发 | 根据 Next Step 和已验证 Thread 生成的下一封草稿 |
 | `Evaluation` | 完整评估流程写入 | 合作方 Evaluation Doc 链接 |
 | `Website Stat` | 完整评估流程写入 | 从 Screenshot 可见值提取，按现有格式写为 `DA:<value> OT:<value>`；Evaluation Doc 仍保留真实 provider 指标名 |
@@ -73,13 +76,16 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 ## 4. Evaluation 与 Placement 标准
 
 - Health assessment 比较完整的 `https://milvus.io/`、`https://zilliz.com/` 和合作方域名。
+- 每份 Evaluation 的 `外链健康度` 都要显示 `我方域名基准（用户提供，2026-08-04）`：Milvus 为 Moz DA 45、月自然访问 130.2K、Referring Domains 7K、Backlinks 488.4K；Zilliz 为 Moz DA 36、月自然访问约 19.7K、Referring Domains 4.3K、Backlinks 318K+。除 Moz DA 外，其余指标未指定 provider，不得擅自补写。
 - Moz DA、Ahrefs DR、SEMrush Authority Score 等指标必须保留 provider 标签，不能当作同一个数值比较。
 - Tracker 的 `Website Stat` 使用历史简写 `DA:<value> OT:<value>`；若截图是 SEMrush，Evaluation 正文仍写 `SEMrush Authority Score`，不能改称 Moz DA。截图明确显示不可用时写 `N/A`。
+- 上述 Milvus/Zilliz 基准只写入 Evaluation 正文，不写入合作方记录的 `Website Stat`；后者仍只抄录合作方 Screenshot 中可见的 authority 与 organic traffic。
 - 对方候选必须是可索引的真实 Blog 内容；不接受 homepage、product/service、company、contact、directory、partner 或 generic resource-list 页面。
 - 对方在候选 Blog 中添加我们的链接时，链接目标必须是相关的非 FAQ Milvus/Zilliz 页面；Zilliz AI FAQ、Milvus AI Quick Reference 及其他 FAQ/reference-style 页面都不能作为这一侧的目标。
 - 我方 Blog 候选只来自 `zilliz.com/blog/` 或 `milvus.io/blog/`，排除产品发布、功能公告、Featured collection 和 sponsored-style 内容。
 - Milvus AI Quick Reference 候选只来自 `milvus.io/ai-quick-reference/`，仅用于我们给对方添加链接的一侧；Zilliz AI FAQ 不属于可用 inventory。
 - Evaluation 输出不包含 Decision、Best Bilateral Placement、Missing Information 或 reply draft。
+- Evaluation 文档标题、章节、表头、分析和建议必须使用中文；专有名词、URL、provider 指标名、精确英文 anchor 和英文插入句保持原样。
 
 完整业务合同以 [`BACKGROUND.md`](BACKGROUND.md) 为准；已安装的 evaluation Skills 实现该合同，本仓库不维护第二套评估模板。
 
@@ -87,11 +93,15 @@ Evaluation、Gmail sync 和 Next Draft 是三条独立流程：Evaluation 不同
 
 - Sync 默认使用内置的 Organic Exchange table 和 ongoing communication view；不要借用相邻项目的 table/view ID。凡进入该 view 的记录都属于默认同步范围，不再按 `Status`、`Collaboration` 或默认条数上限二次过滤。
 - 批量写入 Feishu 前先使用 `--dry-run`。
-- 已有 Communication Thread 永不重建或替换。同步只原位刷新顶部 `对接概括`、`Responce`、`Next Step` 三个受管快照段落，并仅追加尚未写入的新 Gmail 消息。新写入消息保存 Gmail message ID，旧文档通过内容签名兼容去重；任何 `Message N` 邮件 block、人工高亮和 `Next Draft` 都不被 PATCH、删除或重建。
+- 已有 Communication Thread 永不重建或替换。同步只原位刷新顶部 `对接概括`、`对方最新回复概括（Responce）`、`下一步（Next Step）` 三个受管快照段落，并兼容旧英文优先标题；仅追加尚未写入的新 Gmail 消息。新写入消息保存 Gmail message ID，旧文档通过内容签名兼容去重；任何邮件 block、人工高亮和 `Next Draft` 都不被 PATCH、删除或重建。
+- Communication Thread 的文档标题、Agent 生成的结构标题、同步审计信息、摘要和说明文字必须使用中文；Gmail 原文、邮件地址、人工高亮证据和实际 outbound reply 文案保持原始工作语言。
 - Gmail Thread 写入 Communication Thread 时会去除回复里重复引用的历史邮件，保留可读的实际消息内容。
 - 只有 outgoing email 中人工高亮的文字可以成为模板证据；incoming 高亮和未高亮文字不能成为 reusable phrasing。
 - 每个连续高亮片段独立生成一份 Context 和 Template。同一封邮件中有多个分开的高亮，也不能合并。
 - 完整邮件和 Thread 只用于推断高亮片段的适用场景，不能把未高亮措辞混入模板。
+- 模板 Wiki 的新增条目统一按以下顺序追加：二级场景标题 → 加粗标签的 `Scenario / context` → inline-code `Evidence ID` → 加粗标签及可点击链接的 `Source Communication Thread` → 三级 `Reusable reply template` → 代码块模板正文；不再写入 batch summary、cross-thread pattern 或重复的 thread evidence 区块。
+- 模板正文必须逐字保留高亮原句的句式、词汇、大小写、标点和行序。只允许把原句中确实存在的核心对象精确替换成描述性字段，例如 `[Partner Company Name]`、`[content title]`、`[URL]`、`[confirmed date]`；不存在于高亮原句中的称呼、落款、问句、承诺或说明一律不得补写。
+- AI 只能生成场景标题、Context 和“原文精确子串 → 字段”的替换建议，不能直接生成 Template 句子。替换源文字若不能在高亮片段中逐字匹配，程序会丢弃该替换。
 - 已沉淀的高亮证据通过稳定 evidence ID 去重，后续同步不会重复写入同一份模板。
 - 模板沉淀要求运行时 Feishu app 对模板 Wiki 有编辑权限。如果末尾沉淀阶段返回 `1770032`，先回读确认此前 Base/Thread 更新是否已经成功，再使用有权限的 user identity 补写对应 evidence ID，最后重跑 dry run 验证邮件、`Last Touch` 和模板证据都已幂等收口。
 - 没有 Domain、Contact 或其他合作方标识的行会在 Gmail 搜索前安全跳过，不会退化成仅按时间范围搜索整个邮箱。
