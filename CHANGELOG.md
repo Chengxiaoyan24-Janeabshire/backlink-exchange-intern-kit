@@ -10,6 +10,14 @@
 4. 每条 bullet 说明新增或改变了什么能力、行为或用户结果，不写成文件名清单。
 5. Change Log 与对应代码或文档放在同一批 commit 中，不能在功能推送后再补。
 
+## 2026-08-31 — Evaluation 候选格式固化
+
+### 变更
+
+- 对方添加我方链接的候选表固定为六列：`优先级`、`<合作方名称> 文章`、`日期`、`Section / Anchor`、`句子级插入建议`、`我方目标`，列名和顺序不得替换。
+- `Section / Anchor` 必须同时给出具体位置与英文 anchor；插入建议必须是可直接执行的完整英文句子；我方目标必须单独提供真实、可点击的非 FAQ Milvus/Zilliz URL。
+- Evaluation 继续强制使用完整域名基准，并明确区分 Moz DA、SEMrush Authority Score 等不同 provider 指标以及双方可用的 placement inventory。
+
 ## 2026-08-04 — Evaluation 我方域名基准
 
 ### Added
